@@ -61,27 +61,38 @@ trigger:
   to: "on"
 
 action:
+  - alias: "Assign variables for template"
+    variables:
+      # We map inputs to variables here so the template can see them
+      v_start: !input night_start_time
+      v_end: !input night_end_time
+      v_day_br: !input day_brightness
+      v_night_br: !input night_brightness
+
   - alias: "Turn on light with calculated brightness"
     service: light.turn_on
     target: !input light_target
     data:
       brightness_pct: >
-        {% set start = states('input_datetime.night_start_time') if 'input_datetime' in (start_input | string) else (!input night_start_time) %}
-        {% set end = !input night_end_time %}
-        {% set now = now().strftime('%H:%M:%S') %}
-        {% if start < end %}
-          {{ (!input night_brightness) if start <= now <= end else (!input day_brightness) }}
+        {% set now_time = now().strftime('%H:%M:%S') %}
+        {% if v_start < v_end %}
+          {# Daytime window (e.g., 08:00 to 20:00) #}
+          {{ v_night_br if v_start <= now_time <= v_end else v_day_br }}
         {% else %}
-          {{ (!input night_brightness) if now >= start or now <= end else (!input day_brightness) }}
+          {# Overnight window (e.g., 22:00 to 06:00) #}
+          {{ v_night_br if now_time >= v_start or now_time <= v_end else v_day_br }}
         {% endif %}
+
   - alias: "Wait for motion to stop"
     wait_for_trigger:
       platform: state
       entity_id: !input motion_entity
       from: "on"
       to: "off"
+
   - alias: "Wait for timeout"
     delay: !input no_motion_wait
+
   - alias: "Turn off light"
     service: light.turn_off
     target: !input light_target
